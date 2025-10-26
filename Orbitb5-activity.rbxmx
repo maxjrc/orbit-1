@@ -20,6 +20,7 @@ end
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local HttpQueue = require(script.Components.HttpQueue)
 local FastWait = require(script.Components.FastWait)
@@ -40,6 +41,7 @@ local Close = Instance.new("BindableEvent")
 local messageTable = {}
 local rankTable = {}
 local afkTable = {}
+local playerSessions = {}
 
 -- Configuration
 local Configuration = {
@@ -53,9 +55,35 @@ local Configuration = {
 	groupId = 3167534, -- The group ID to perform activity tracking for
 	minTrackedRank = 99,	 -- The minimum rank ID to perform activity tracking for (This value is retrieved from your Orbit instance on game launch)
 	minutesTillAFK = 2, -- How long a player can last without moving before being marked AFK
+	-- Remote Admin features
+	enableRemoteAdmin = true, -- Enable Remote Admin integration
+	enableChatTracking = true, -- Track chat messages for Remote Admin
+	enableEventTracking = true, -- Track game events for Remote Admin
+	metricsInterval = 30, -- How often to send server metrics (seconds)
 }
 
 warn("Orbit: Module loaded; activity will be tracked.")
+
+-- Remote Admin API Functions
+local function SendRemoteAdminData(eventType, data)
+	if not Configuration.enableRemoteAdmin then return end
+
+	local request = HttpQueue.HttpRequest.new(
+		Configuration.url .. "/api/remote-admin/activity",
+		"POST",
+		HttpService:JSONEncode({
+			type = eventType,
+			data = data
+		}),
+		nil,
+		{
+			["Content-Type"] = "application/json",
+			['authorization'] = "Bearer " .. Configuration.auth
+		}
+	);
+
+	local result = request:Send()
+end
 
 -- Functions
 local function isUserTracked(Player)
@@ -78,13 +106,34 @@ local function CreateSession(Player)
 			['authorization'] = Configuration.auth
 		}
 	);
-	
+
 	local result = request:Send()
 
+	-- Remote Admin: Track player join
+	if Configuration.enableRemoteAdmin then
+		SendRemoteAdminData("player_join", {
+			userId = Player.UserId,
+			username = Player.Name,
+			sessionData = {
+				gameId = game.GameId,
+				placeId = game.PlaceId,
+				rank = rankTable[Player.UserId] and rankTable[Player.UserId].Rank or 0
+			}
+		})
+	end
+
+	playerSessions[Player.UserId] = {
+		startTime = tick(),
+		messages = 0,
+		afkTime = 0
+	}
 end
 
 local function EndSession(Player)
 	if isUserTracked(Player) then
+		local sessionData = playerSessions[Player.UserId]
+		local sessionDuration = sessionData and (tick() - sessionData.startTime) or 0
+
 		local request = HttpQueue.HttpRequest.new(
 			Configuration.url .. "/api/activity/session?type=end",
 			"POST",
@@ -98,14 +147,103 @@ local function EndSession(Player)
 
 		local result = request:Send()
 
+		-- Remote Admin: Track player leave
+		if Configuration.enableRemoteAdmin then
+			SendRemoteAdminData("player_leave", {
+				userId = Player.UserId,
+				username = Player.Name,
+				sessionData = {
+					duration = sessionDuration,
+					messages = sessionData and sessionData.messages or 0,
+					afkTime = Player["Orbit AFK Timer"] and Player["Orbit AFK Timer"].Value or 0
+				}
+			})
+		end
 	end
+
+	playerSessions[Player.UserId] = nil
+end
+
+-- Remote Admin tracking functions
+local function TrackChatMessage(Player, message)
+	if not Configuration.enableChatTracking or not Configuration.enableRemoteAdmin then return end
+
+	SendRemoteAdminData("chat_message", {
+		userId = Player.UserId,
+		username = Player.Name,
+		message = message,
+		filtered = false -- Roblox handles filtering
+	})
+end
+
+local function TrackPlayerAction(Player, actionType, data)
+	if not Configuration.enableRemoteAdmin then return end
+
+	local character = Player.Character
+	local position = nil
+
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		local pos = character.HumanoidRootPart.Position
+		position = {x = pos.X, y = pos.Y, z = pos.Z}
+	end
+
+	SendRemoteAdminData("player_action", {
+		userId = Player.UserId,
+		username = Player.Name,
+		actionType = actionType,
+		position = position,
+		additionalData = data
+	})
+end
+
+local function TrackGameEvent(eventType, userId, username, eventData)
+	if not Configuration.enableEventTracking or not Configuration.enableRemoteAdmin then return end
+
+	SendRemoteAdminData("game_event", {
+		eventType = eventType,
+		userId = userId,
+		username = username,
+		eventData = eventData
+	})
+end
+
+local function SendServerMetrics()
+	if not Configuration.enableRemoteAdmin then return end
+
+	local playerCount = #Players:GetPlayers()
+	local activePlayers = {}
+
+	for _, player in pairs(Players:GetPlayers()) do
+		if isUserTracked(player) then
+			table.insert(activePlayers, {
+				userId = player.UserId,
+				username = player.Name,
+				isAFK = table.find(afkTable, player) ~= nil,
+				rank = rankTable[player.UserId] and rankTable[player.UserId].Rank or 0
+			})
+		end
+	end
+
+	SendRemoteAdminData("server_metrics", {
+		playerCount = playerCount,
+		activePlayers = activePlayers,
+		performance = {
+			heartbeat = RunService.Heartbeat:Wait(),
+			timestamp = tick()
+		}
+	})
 end
 
 local function InputChange(Player, Status)
 	if Status and not table.find(afkTable, Player) then
 		table.insert(afkTable, Player)
+		TrackPlayerAction(Player, "afk_start", {timestamp = tick()})
 	elseif not Status then
-		table.remove(afkTable, table.find(afkTable, Player))
+		local index = table.find(afkTable, Player)
+		if index then
+			table.remove(afkTable, index)
+			TrackPlayerAction(Player, "afk_end", {timestamp = tick()})
+		end
 	end
 end
 
@@ -118,25 +256,42 @@ local function MovementDetection(Player)
 		if Speed <= 0 then
 			local CurrentTime = os.clock()
 			lastMovement = CurrentTime
-			
+
 			FastWait(60*Configuration.minutesTillAFK)
-			
+
 			if lastMovement == CurrentTime then
 				if not table.find(afkTable, Player) then
 					table.insert(afkTable, Player)
-				end	
+					TrackPlayerAction(Player, "afk_start", {timestamp = tick()})
+				end
 			end
 		else
 			if table.find(afkTable, Player) then
-				table.remove(afkTable, table.find(afkTable, Player))
-			end	
+				local index = table.find(afkTable, Player)
+				table.remove(afkTable, index)
+				TrackPlayerAction(Player, "afk_end", {timestamp = tick()})
+			end
 		end
 	end
 	
 	local function MovementListeners()
-		Humanoid.Swimming:Connect(MovementChanged);
-		Humanoid.Climbing:Connect(MovementChanged);
+		Humanoid.Swimming:Connect(function()
+			MovementChanged(1)
+			TrackPlayerAction(Player, "movement", {action = "swimming"})
+		end);
+		Humanoid.Climbing:Connect(function()
+			MovementChanged(1)
+			TrackPlayerAction(Player, "movement", {action = "climbing"})
+		end);
 		Humanoid.Running:Connect(MovementChanged);
+
+		-- Track additional events
+		Humanoid.Died:Connect(function()
+			TrackGameEvent("death", Player.UserId, Player.Name, {
+				timestamp = tick(),
+				position = Character:FindFirstChild("HumanoidRootPart") and Character.HumanoidRootPart.Position or nil
+			})
+		end)
 	end
 	
 	MovementListeners()
@@ -164,10 +319,17 @@ Players.PlayerAdded:Connect(function(Player)
 	InitiateTovy(Player)
 	Player.CharacterAdded:Connect(function()
 		MovementDetection(Player)
+		TrackGameEvent("character_spawned", Player.UserId, Player.Name, {timestamp = tick()})
 	end)
-	Player.Chatted:Connect(function()
+	Player.Chatted:Connect(function(message)
 		if isUserTracked(Player) then
 			messageTable[Player.UserId] += 1
+			if playerSessions[Player.UserId] then
+				playerSessions[Player.UserId].messages += 1
+			end
+
+			-- Track chat for Remote Admin
+			TrackChatMessage(Player, message)
 		end
 	end)
 end)
@@ -181,30 +343,235 @@ Players.PlayerRemoving:Connect(function(Player)
 	end
 	
 	if afkTable[Player] then
-		afkTable[Player] = nil
+		local index = table.find(afkTable, Player)
+		if index then
+			table.remove(afkTable, index)
+		end
 	end
 end)
 
 game:BindToClose(function()
-	task.wait(10)
-		Close.Event:Connect()
+	-- Send final metrics before shutdown
+	SendServerMetrics()
+	task.wait(2)
+	Close.Event:Connect()
 end)
 
 for _,Player in pairs(Players:GetPlayers()) do
 	InitiateTovy(Player)
 end
 
-while true do
-	for index, Player in pairs(afkTable) do
-		local t = Player["Orbit AFK Timer"]
-		if Players:GetPlayerByUserId(Player.UserId) and t then
-			t.Value += 1
-		else 
-			table.remove(afkTable, index)
+-- Main tracking loop
+spawn(function()
+	while true do
+		-- Update AFK timers
+		for index, Player in pairs(afkTable) do
+			local t = Player["Orbit AFK Timer"]
+			if Players:GetPlayerByUserId(Player.UserId) and t then
+				t.Value += 1
+				if playerSessions[Player.UserId] then
+					playerSessions[Player.UserId].afkTime += 1
+				end
+			else
+				table.remove(afkTable, index)
+			end
+		end
+
+		task.wait(60)
+	end
+end)
+
+-- Server metrics reporting
+if Configuration.enableRemoteAdmin then
+	spawn(function()
+		while true do
+			SendServerMetrics()
+			task.wait(Configuration.metricsInterval)
+		end
+	end)
+end
+
+-- Command polling system
+local function PollForCommands()
+	if not Configuration.enableRemoteAdmin then return end
+
+	local request = HttpQueue.HttpRequest.new(
+		Configuration.url .. "/api/remote-admin/poll",
+		"POST",
+		HttpService:JSONEncode({
+			gameId = game.GameId,
+			placeId = game.PlaceId,
+			jobId = game.JobId
+		}),
+		nil,
+		{
+			["Content-Type"] = "application/json",
+			['authorization'] = "Bearer " .. Configuration.auth
+		}
+	);
+
+	local success, result = pcall(function()
+		return request:Send()
+	end)
+
+	if success and result and result.Body then
+		local data = HttpService:JSONDecode(result.Body)
+		if data.commands and #data.commands > 0 then
+			for _, command in pairs(data.commands) do
+				ExecuteCommand(command)
+			end
 		end
 	end
-	task.wait(60)
-end]]></ProtectedString>
+end
+
+-- Command execution system
+local function ExecuteCommand(commandData)
+	local command = commandData.command
+	local targetUserId = commandData.targetUserId
+	local parameters = commandData.parameters or {}
+	local executedBy = commandData.executedBy
+
+	warn("Orbit Remote Admin: Executing command:", command, "Target:", targetUserId)
+
+	if command == "kick_player" then
+		local player = Players:GetPlayerByUserId(tonumber(targetUserId))
+		if player then
+			local reason = parameters.reason or "Kicked by admin"
+			player:Kick(reason)
+			TrackGameEvent("admin_kick", tonumber(targetUserId), player.Name, {
+				reason = reason,
+				executedBy = executedBy,
+				timestamp = tick()
+			})
+		end
+
+	elseif command == "ban_player" then
+		local player = Players:GetPlayerByUserId(tonumber(targetUserId))
+		if player then
+			local reason = parameters.reason or "Banned by admin"
+			player:Kick("You have been banned: " .. reason)
+			TrackGameEvent("admin_ban", tonumber(targetUserId), player.Name, {
+				reason = reason,
+				executedBy = executedBy,
+				timestamp = tick()
+			})
+		end
+
+	elseif command == "message_player" then
+		local player = Players:GetPlayerByUserId(tonumber(targetUserId))
+		if player then
+			local message = parameters.message or "Message from admin"
+			-- Send message to player (you can implement this with a GUI or chat)
+			game:GetService("StarterGui"):SetCore("SendNotification", {
+				Title = "Admin Message";
+				Text = message;
+				Duration = 10;
+			})
+		end
+
+	elseif command == "broadcast_message" then
+		local message = parameters.message or "Server announcement"
+		for _, player in pairs(Players:GetPlayers()) do
+			-- Broadcast to all players
+			game:GetService("StarterGui"):SetCore("SendNotification", {
+				Title = "Server Announcement";
+				Text = message;
+				Duration = 10;
+			})
+		end
+		TrackGameEvent("admin_broadcast", nil, nil, {
+			message = message,
+			executedBy = executedBy,
+			timestamp = tick()
+		})
+
+	elseif command == "server_shutdown" then
+		local reason = parameters.reason or "Server maintenance"
+		-- Warn all players before shutdown
+		for _, player in pairs(Players:GetPlayers()) do
+			game:GetService("StarterGui"):SetCore("SendNotification", {
+				Title = "Server Shutdown";
+				Text = "Server shutting down: " .. reason;
+				Duration = 15;
+			})
+		end
+
+		TrackGameEvent("admin_shutdown", nil, nil, {
+			reason = reason,
+			executedBy = executedBy,
+			timestamp = tick()
+		})
+
+		task.wait(15) -- Give players time to see the message
+		for _, player in pairs(Players:GetPlayers()) do
+			player:Kick("Server shutdown: " .. reason)
+		end
+
+	elseif command == "give_admin" then
+		local player = Players:GetPlayerByUserId(tonumber(targetUserId))
+		if player then
+			-- You can implement admin permissions here
+			-- This could set a value in the player or send to a admin system
+			TrackGameEvent("admin_promote", tonumber(targetUserId), player.Name, {
+				executedBy = executedBy,
+				timestamp = tick()
+			})
+		end
+
+	elseif command == "teleport_player" then
+		local player = Players:GetPlayerByUserId(tonumber(targetUserId))
+		if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local x = parameters.x or 0
+			local y = parameters.y or 50
+			local z = parameters.z or 0
+			player.Character.HumanoidRootPart.CFrame = CFrame.new(x, y, z)
+
+			TrackGameEvent("admin_teleport", tonumber(targetUserId), player.Name, {
+				position = {x = x, y = y, z = z},
+				executedBy = executedBy,
+				timestamp = tick()
+			})
+		end
+	end
+end
+
+-- Start command polling
+if Configuration.enableRemoteAdmin then
+	spawn(function()
+		while true do
+			PollForCommands()
+			task.wait(30) -- Poll for commands every 30 seconds
+		end
+	end)
+end
+
+-- Enhanced API for game developers to track custom events
+local function TrackPlayerPurchase(Player, productId, price)
+	TrackGameEvent("purchase", Player.UserId, Player.Name, {
+		productId = productId,
+		price = price,
+		timestamp = tick()
+	})
+end
+
+local function TrackPlayerAchievement(Player, achievementName, description)
+	TrackGameEvent("achievement", Player.UserId, Player.Name, {
+		achievementName = achievementName,
+		description = description,
+		timestamp = tick()
+	})
+end
+
+-- Public API for game developers
+_G.OrbitRemoteAdmin = {
+	TrackEvent = TrackGameEvent,
+	TrackPurchase = TrackPlayerPurchase,
+	TrackAchievement = TrackPlayerAchievement,
+	TrackPlayerAction = TrackPlayerAction,
+	IsPlayerTracked = isUserTracked
+}
+
+warn("Orbit Remote Admin: Enhanced tracking enabled! Use _G.OrbitRemoteAdmin for custom events.")]]></ProtectedString>
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>

@@ -1,7 +1,7 @@
 import React, { Fragment, useEffect, useState, useMemo } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { workspacestate } from "@/state";
-import { themeState } from "@/state/theme";
+import { themeState } from "@/state";
 import { FC } from '@/types/settingsComponent'
 import { Chart, ChartData, ScatterDataPoint } from "chart.js"
 import { Line } from "react-chartjs-2";

@@ -23,6 +23,7 @@ model workspace {
   apiKey            apiKey[]
   members           workspaceMember[]
   adjustments       ActivityAdjustment[]
+  gameServers       GameServer[]
 }
 
 model config {
@@ -71,6 +72,9 @@ model user {
   sessionNotes      SessionNote[]
   sessionLogsAsActor SessionLog[] @relation("SessionLogActor")
   sessionLogsAsTarget SessionLog[] @relation("SessionLogTarget")
+  serverCommands    ServerCommand[]
+  moderatedMessages ChatMessage[]
+  queuedCommands    ServerCommandQueue[]
 }
 
 model userInfo {
@@ -331,4 +335,140 @@ model ActivityAdjustment {
   @@index([userId])
   @@index([actorId])
   @@index([workspaceGroupId])
+}
+
+model GameServer {
+  id               String    @id @default(uuid()) @db.Uuid
+  name             String
+  description      String?
+  gameId           BigInt    // Roblox Game/Place ID
+  universeId       BigInt?   // Roblox Universe ID
+  serverUrl        String?   // Custom server URL if needed
+  apiKey           String    // API key for server communication
+  isActive         Boolean   @default(true)
+  lastSeen         DateTime?
+  playerCount      Int       @default(0)
+  maxPlayers       Int       @default(100)
+  workspaceGroupId Int
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspace        workspace @relation(fields: [workspaceGroupId], references: [groupId])
+  commands         ServerCommand[]
+  metrics          ServerMetrics[]
+  chatMessages     ChatMessage[]
+  gameEvents       GameEvent[]
+  playerActions    PlayerAction[]
+  commandQueue     ServerCommandQueue[]
+
+  @@index([workspaceGroupId])
+  @@index([gameId])
+}
+
+model ServerCommand {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String    @db.Uuid
+  command    String    // Command type (kick, ban, teleport, message, etc.)
+  parameters Json?     // Command parameters
+  executedBy BigInt    // User who executed the command
+  response   Json?     // Response from server
+  status     String    @default("pending") // pending, success, failed
+  createdAt  DateTime  @default(now())
+
+  server     GameServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  executor   user       @relation(fields: [executedBy], references: [userid])
+
+  @@index([serverId])
+  @@index([executedBy])
+  @@index([status])
+}
+
+model ServerMetrics {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String    @db.Uuid
+  playerCount Int
+  activePlayers Json?   // List of active players with details
+  performance Json?    // Server performance metrics (CPU, memory, etc.)
+  timestamp  DateTime  @default(now())
+
+  server     GameServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([timestamp])
+}
+
+model ChatMessage {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String    @db.Uuid
+  userId     BigInt    // Roblox User ID who sent the message
+  username   String    // Username at time of message
+  message    String    // Chat message content
+  filtered   Boolean   @default(false) // Whether message was filtered
+  flagged    Boolean   @default(false) // Whether message was flagged for review
+  moderatedBy BigInt?  // User who moderated this message
+  timestamp  DateTime  @default(now())
+
+  server     GameServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  moderator  user?      @relation(fields: [moderatedBy], references: [userid])
+
+  @@index([serverId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([flagged])
+}
+
+model GameEvent {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String    @db.Uuid
+  eventType  String    // join, leave, death, purchase, achievement, etc.
+  userId     BigInt?   // Roblox User ID (if applicable)
+  username   String?   // Username at time of event
+  data       Json?     // Event-specific data
+  timestamp  DateTime  @default(now())
+
+  server     GameServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([eventType])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+model PlayerAction {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String    @db.Uuid
+  userId     BigInt    // Roblox User ID
+  username   String    // Username at time of action
+  actionType String    // movement, afk_start, afk_end, chat, etc.
+  position   Json?     // Player position if applicable
+  data       Json?     // Additional action data
+  timestamp  DateTime  @default(now())
+
+  server     GameServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([userId])
+  @@index([actionType])
+  @@index([timestamp])
+}
+
+model ServerCommandQueue {
+  id         String    @id @default(uuid()) @db.Uuid
+  serverId   String?   @db.Uuid  // Specific server, or null for all servers
+  command    String    // kick, ban, message, shutdown, etc.
+  targetUserId BigInt? // Target player for kick/ban commands
+  parameters Json?     // Command parameters (reason, message text, etc.)
+  executedBy BigInt    // Admin who issued the command
+  status     String    @default("pending") // pending, delivered, failed
+  priority   Int       @default(1) // Higher numbers = higher priority
+  createdAt  DateTime  @default(now())
+  deliveredAt DateTime?
+
+  server     GameServer? @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  executor   user        @relation(fields: [executedBy], references: [userid])
+
+  @@index([serverId])
+  @@index([status])
+  @@index([priority, createdAt])
+  @@index([targetUserId])
 }

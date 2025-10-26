@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import type { NextPage } from "next"
-import { loginState, workspacestate } from "@/state"
-import { themeState } from "../state/theme"
+import { loginState, workspacestate, themeState } from "@/state"
 import { useRecoilState } from "recoil"
 import { Menu, Listbox, Dialog } from "@headlessui/react"
 import { useRouter } from "next/router"
@@ -21,6 +20,7 @@ import {
   IconSun,
   IconMoon,
   IconX,
+  IconDeviceGamepad2,
 } from "@tabler/icons-react"
 import axios from "axios"
 import clsx from "clsx"
@@ -91,6 +91,12 @@ const Sidebar: NextPage<SidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
       icon: IconFileText,
       accessible: true,
     }] : []),
+    {
+      name: "Remote Admin",
+      href: "/workspace/[id]/remote-admin",
+      icon: IconDeviceGamepad2,
+      accessible: workspace.yourPermission.includes("admin"),
+    },
     {
       name: "Settings",
       href: "/workspace/[id]/settings",

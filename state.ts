@@ -2,6 +2,14 @@ import { atom, selector } from "recoil";
 import Router from "next/router";
 import { role } from "@prisma/client";
 import axios from "axios";
+
+const getInitialTheme = (): "light" | "dark" => {
+	if (typeof window !== "undefined") {
+		const stored = localStorage.getItem("theme");
+		if (stored === "dark" || stored === "light") return stored;
+	}
+	return "light";
+};
 export type workspaceinfo = {
 	groupId: number;
 				groupThumbnail: string;
@@ -51,5 +59,9 @@ const workspacestate = atom({
 	}
 });
 
+const themeState = atom<"light" | "dark">({
+	key: "themeState",
+	default: getInitialTheme(),
+});
 
-export {loginState, workspacestate};
+export {loginState, workspacestate, themeState};

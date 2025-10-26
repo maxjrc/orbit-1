@@ -4,7 +4,7 @@ import type React from "react"
 
 import "@/styles/globals.scss"
 import type { AppProps } from "next/app"
-import { workspacestate } from "@/state"
+import { workspacestate, themeState } from "@/state"
 import { RecoilRoot, useRecoilState, useRecoilValue } from "recoil"
 import type { pageWithLayout } from "@/layoutTypes"
 import { useEffect, useState } from "react"
@@ -21,7 +21,6 @@ import {
   PointElement,
   LineElement,
 } from "chart.js"
-import { themeState } from "../state/theme"
 import AuthProvider from "./AuthProvider"
 import axios from "axios"
 
