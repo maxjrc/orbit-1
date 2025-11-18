@@ -2,13 +2,14 @@
 
 import type { pageWithLayout } from "@/layoutTypes"
 import { loginState } from "@/state"
-import { IconChevronRight, IconHome, IconLock, IconFlag, IconKey } from "@tabler/icons-react"
+import { IconChevronRight, IconHome, IconLock, IconFlag, IconKey, IconServer, IconBellExclamation } from "@tabler/icons-react"
 import Permissions from "@/components/settings/permissions"
 import Workspace from "@/layouts/workspace"
 import { useRecoilState } from "recoil"
 import type { GetServerSideProps } from "next"
 import * as All from "@/components/settings/general"
 import * as Api from "@/components/settings/api"
+import * as Instance from "@/components/settings/instance"
 import toast, { Toaster } from "react-hot-toast"
 import * as noblox from "noblox.js"
 import { withPermissionCheckSsr } from "@/utils/permissionsManager"
@@ -104,7 +105,7 @@ const SECTIONS = {
     icon: IconFlag,
     description: "Enable or disable workspace features",
     components: Object.entries(All)
-      .filter(([key]) => key === "Guide" || key === "Sessions" || key === "Alliances")
+      .filter(([key]) => key === "Guide" || key === "Sessions" || key === "Alliances" || key === "Leaderboard")
       .map(([key, Component]) => ({
         key,
         component: Component,
@@ -127,6 +128,22 @@ const SECTIONS = {
     description: "Manage roles and user permissions",
     components: [],
   },
+  audit: {
+    name: "Audit Logs",
+    icon: IconBellExclamation,
+    description: "View workspace audit events and filters",
+    components: [],
+  },
+  instance: {
+    name: "Services",
+    icon: IconServer,
+    description: "Configure external services and integrations",
+    components: Object.entries(Instance).map(([key, Component]) => ({
+      key,
+      component: Component,
+      title: Component.title,
+    })),
+  },
 }
 
 const Settings: pageWithLayout<Props> = ({ users, roles, grouproles }) => {
@@ -138,6 +155,14 @@ const Settings: pageWithLayout<Props> = ({ users, roles, grouproles }) => {
       return (
         <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm p-4 sm:p-6">
           <Permissions users={users} roles={roles} grouproles={grouproles} />
+        </div>
+      )
+    }
+
+    if (activeSection === "audit") {
+      return (
+        <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm p-4 sm:p-6">
+          <All.AuditLogs />
         </div>
       )
     }

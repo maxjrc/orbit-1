@@ -4,4 +4,6 @@ import Alliances from './allies'
 import Activity from './activity'
 import home from './home'
 import Sessions from './sessions'
-export { home, Color, Guide, Alliances, Sessions, Activity }
+import Leaderboard from './leaderboard'
+import AuditLogs from './logs'
+export { home, Color, Guide, Alliances, Sessions, Activity, Leaderboard, AuditLogs }

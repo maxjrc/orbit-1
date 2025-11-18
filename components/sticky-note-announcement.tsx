@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { IconX, IconPin } from "@tabler/icons-react"
-const ANNOUNCEMENT_KEY = "announcementDismissed_v2_1_0b2";
+const ANNOUNCEMENT_KEY = "announcementDismissed_v2_1_3b1";
 
 export default function StickyNoteAnnouncement() {
   const [isVisible, setIsVisible] = useState(false)
@@ -18,7 +18,7 @@ export default function StickyNoteAnnouncement() {
   if (!isVisible) return null
 
   return (
-    <div className="z-0 bg-white dark:bg-zinc-800 rounded-xl shadow-sm p-4 flex items-start space-x-4 mb-6 relative">
+    <div className="z-0 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-xl shadow-sm p-4 flex items-start space-x-4 mb-6 relative">
       <img
         src="/favicon-32x32.png"
         alt="Orbit"
@@ -33,29 +33,23 @@ export default function StickyNoteAnnouncement() {
     <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0"></p>
     <div className="text-zinc-800 dark:text-zinc-300 text-sm space-y-2">
       <p>
-        👋 <strong>Orbit v2.1.1beta1 is live!</strong> — Sessions ⏱️
+        👋 <strong>Orbit v2.1.4 is live!</strong>
         <br />
         Here’s what’s new since the last announcement:
       </p>
 
       <p className="mt-4 font-semibold">Introduction</p>
       <p>
-        Our new system is LIVE. You can now create sessions (shifts, trainings, events, and more) that your team can view and book right from Orbit. 
-		Sessions can be made up to a year in advance, and can be one-time or recurring.
-		Like before, you can still create as many session roles as required for your team.
+        We've taken on feedback and redesigned some core features to enhance your user experience.
       </p>
 
-      <p className="mt-4 font-semibold">Features</p>
+      <p className="mt-4 font-semibold">Changes</p>
       <ul className="list-disc list-inside space-y-1">
-        <li>Calendar Overview</li>
-        <li>Session Names, Types, Descriptions</li>
-        <li>Scheduled and unscheduled sessions</li>
-        <li>Manage individual or recurring</li>
-        <li>Statuses and Roles</li>
-        <li>Session Notes</li>
-        <li>Activity Log</li>
-        <li>New API Endpoints</li>
-        <li>Session Tag Color Picker</li>
+        <li>Sessions has a sleek new design for easier navigation.</li>
+        <li>Audit Logs - Most APIs are now tracked and monitored.</li>
+        <li>Documents Support external links.</li>
+        <li>Built in Document editor now supports markdown.</li>
+        <li>And more...</li>
       </ul>
 
       <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">

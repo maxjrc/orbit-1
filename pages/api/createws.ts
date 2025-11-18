@@ -108,6 +108,11 @@ export async function handler(
 					key: 'sessions',
 					workspaceGroupId: groupId,
 					value: { enabled: false }
+				},
+				{
+					key: 'leaderboard',
+					workspaceGroupId: groupId,
+					value: { enabled: false }
 				}
 			]
 		})
@@ -121,6 +126,9 @@ export async function handler(
 					'admin',
 					'view_staff_config',
 					'manage_sessions',
+					'sessions_assign',
+					'sessions_claim',
+					'sessions_host',
 					'manage_activity',
 					'post_on_wall',
 					'manage_wall',

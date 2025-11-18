@@ -46,7 +46,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       .status(405)
       .json({ success: false, error: "Method not allowed" });
 
-  const { sessionTypeId, name, type, schedule, timezoneOffset } = req.body;
+  const { sessionTypeId, name, type, schedule, timezoneOffset, duration } = req.body;
 
   if (!sessionTypeId || !name || !type || !schedule) {
     return res
@@ -131,13 +131,16 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
 
         if (utcSessionDate >= currentDate && utcSessionDate <= endDate) {
           const scheduleId = sessionType.schedule && sessionType.schedule.length > 0 ? sessionType.schedule[0].id : null;
-          sessionsToCreate.push({
+          const sessionData: any = {
             date: utcSessionDate,
             sessionTypeId: sessionType.id,
             scheduleId: scheduleId,
             name: name,
             type: type,
-          });
+          };
+          
+          sessionData.duration = duration || 30;
+          sessionsToCreate.push(sessionData);
         }
         sessionCount++;
       }
@@ -193,6 +196,11 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
     await prisma.sessionLog.createMany({
       data: logEntries,
     });
+
+    try {
+      const { logAudit } = await import('@/utils/logs');
+      await logAudit(Number(req.query.id), Number(req.session.userid), 'session.create.scheduled', `session_bulk:${sessionType.id}`, { count: createdSessions.length, sessionType: sessionType.name });
+    } catch (e) {}
 
     res.status(200).json({
       success: true,

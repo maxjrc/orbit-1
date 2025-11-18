@@ -44,7 +44,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       .status(405)
       .json({ success: false, error: "Method not allowed" });
 
-  const { sessionTypeId, date, time, name, type, timezoneOffset } = req.body;
+  const { sessionTypeId, date, time, name, type, timezoneOffset, duration } = req.body;
 
   if (!sessionTypeId || !date || !time || !name || !type) {
     return res
@@ -62,7 +62,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
   try {
     const sessionType = await prisma.sessionType.findUnique({
       where: { id: sessionTypeId },
-      include: { hostingRoles: true },
+      include: { schedule: true },
     });
 
     if (!sessionType) {
@@ -85,18 +85,21 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
     const offsetMinutes = timezoneOffset || 0;
     const utcDate = new Date(localDateTime.getTime() + (offsetMinutes * 60000));
 
+    const sessionData: any = {
+      name,
+      type,
+      date: utcDate,
+      sessionTypeId: sessionTypeId,
+      scheduleId: null,
+    };
+
+    sessionData.duration = duration || 30;
     const session = await prisma.session.create({
-      data: {
-        name,
-        type,
-        date: utcDate,
-        sessionTypeId: sessionTypeId,
-        scheduleId: null,
-      },
+      data: sessionData,
       include: {
         sessionType: {
           include: {
-            hostingRoles: true,
+            schedule: true,
           },
         },
         owner: true,
@@ -122,6 +125,11 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
         },
       },
     });
+
+    try {
+      const { logAudit } = await import('@/utils/logs');
+      await logAudit(Number(req.query.id), Number(req.session.userid), 'session.create.unscheduled', `session:${session.id}`, { id: session.id, sessionType: sessionType.name });
+    } catch (e) {}
 
     res.status(200).json({
       success: true,

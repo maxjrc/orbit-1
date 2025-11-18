@@ -54,26 +54,17 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       },
     },
     include: {
-      sessionType: {
-        include: {
-          hostingRoles: true,
-        },
-      },
+      sessionType: true,
     },
   });
-  if (
-    !schedule?.sessionType.hostingRoles.find(
-      (r) => r.id === user?.roles[0].id
-    ) &&
-    !user?.roles[0].isOwnerRole &&
-    !user?.roles[0].permissions.includes("admin")
-  )
-    return res
-      .status(403)
-      .json({
-        success: false,
-        error: "You do not have permission to claim this session",
-      });
+  const userRoles = user?.roles || [];
+  const hasHostPermission = userRoles.some((ur: any) => Array.isArray(ur.permissions) && ur.permissions.includes("sessions_host"));
+  const hasOwnerRole = userRoles.some((ur: any) => ur.isOwnerRole);
+  const hasAdminPerm = userRoles.some((ur: any) => Array.isArray(ur.permissions) && ur.permissions.includes("admin"));
+
+  if (!hasHostPermission && !hasOwnerRole && !hasAdminPerm) {
+    return res.status(403).json({ success: false, error: "You do not have permission to claim this session" });
+  }
   if (!schedule)
     return res.status(400).json({ success: false, error: "Invalid schedule" });
   //get date to utc
@@ -110,11 +101,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
         },
       },
       include: {
-        sessionType: {
-          include: {
-            hostingRoles: true,
-          },
-        },
+        sessionType: true,
         sessions: {
           include: {
             owner: true,
@@ -150,11 +137,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       },
     },
     include: {
-      sessionType: {
-        include: {
-          hostingRoles: true,
-        },
-      },
+      sessionType: true,
       sessions: {
         include: {
           owner: true,

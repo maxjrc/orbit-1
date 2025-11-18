@@ -8,7 +8,7 @@
     <img height="40px" src=".github/logo.png"></img>
     <h1>Orbit by Team Planetary</h1>
   </div>
-    <img src="https://img.shields.io/badge/version-v2.1.1beta5-purple"></img>
+    <img src="https://img.shields.io/badge/version-v2.1.4beta5-purple"></img>
   <ul>
     <li><a href="#about">About</a></li>
     <li><a href="#why-consider">Why consider</a></li>
@@ -38,7 +38,7 @@
           Track your members' group activity
         </li>
         <li>
-          Automate things with Orbit (soon)
+          Rank with Orbit Intergrations
         </li>
         <li>
           Warn, promote, demote, and way more to your members
