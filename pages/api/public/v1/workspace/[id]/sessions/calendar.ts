@@ -63,6 +63,7 @@ export default async function handler(
           select: {
             id: true,
             name: true,
+            description: true,
             gameId: true,
             slots: true,
           },
@@ -86,12 +87,14 @@ export default async function handler(
 
     const formattedSessions = sessions.map((session) => ({
       id: session.id,
+      name: session.name,
       date: session.date,
       startedAt: session.startedAt,
       ended: session.ended,
       type: {
         id: session.sessionType.id,
-        name: session.sessionType.name,
+        description: session.sessionType.description,
+        category: session.type,
         gameId: session.sessionType.gameId
           ? Number(session.sessionType.gameId)
           : null,

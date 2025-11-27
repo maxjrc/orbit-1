@@ -140,17 +140,17 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       switch (type) {
         case "promotion":
           if (rankGunAPI) {
-            result = await rankGunAPI.promoteUser(userId, workspaceGroupId);
+            result = await rankGunAPI.promoteUser(userId, rankGun.workspaceId);
           }
           break;
         case "demotion":
           if (rankGunAPI) {
-            result = await rankGunAPI.demoteUser(userId, workspaceGroupId);
+            result = await rankGunAPI.demoteUser(userId, rankGun.workspaceId);
           }
           break;
         case "termination":
           if (rankGunAPI) {
-            result = await rankGunAPI.terminateUser(userId, workspaceGroupId);
+            result = await rankGunAPI.terminateUser(userId, rankGun.workspaceId);
           }
           break;
         case "rank_change":
@@ -205,7 +205,7 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
           if (rankGunAPI) {
             result = await rankGunAPI.setUserRank(
               userId,
-              workspaceGroupId,
+              rankGun.workspaceId,
               parseInt(targetRank)
             );
           }
@@ -213,10 +213,19 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
       }
 
       if (result && !result.success) {
-        const errorMessage = result.error || "Ranking operation failed.";
+        // Log the full result for debugging so we can see RankGun's response shape
+        console.error("RankGun returned an error result:", result);
+        let errorMessage = result.error || "Ranking operation failed.";
+        if (typeof errorMessage === "object") {
+          try {
+            errorMessage = JSON.stringify(errorMessage);
+          } catch (e) {
+            errorMessage = String(errorMessage);
+          }
+        }
         return res.status(400).json({
           success: false,
-          error: errorMessage,
+          error: String(errorMessage),
         });
       }
 
@@ -403,13 +412,20 @@ export async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
         console.error("Error updating user rank in database:", rankUpdateError);
       }
     } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error ||
-        error.message ||
+      let errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
         "RankGun operation failed";
+      if (typeof errorMessage === "object") {
+        try {
+          errorMessage = JSON.stringify(errorMessage);
+        } catch (e) {
+          errorMessage = String(errorMessage);
+        }
+      }
       return res.status(500).json({
         success: false,
-        error: errorMessage,
+        error: String(errorMessage),
       });
     }
   }
